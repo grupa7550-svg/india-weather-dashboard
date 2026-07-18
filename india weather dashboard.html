@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7-Star India Weather Dashboard</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<style>
+  :root{
+    --glow: rgba(120,160,190,0.30);
+    --accent: #8fb8d6;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    min-height:100vh;
+    color:#f2f4f8;
+    background: linear-gradient(135deg,#101820 0%,#253544 40%,#3d5165 75%,#6b8296 100%);
+    background-attachment: fixed;
+    transition: background 1s ease;
+    padding: 28px 6vw 60px;
+    position:relative;
+    overflow-x:hidden;
+  }
+  body::before{
+    content:"";
+    position:fixed; inset:0;
+    background: radial-gradient(circle at 20% 15%, var(--glow), transparent 55%),
+                radial-gradient(circle at 80% 85%, var(--glow), transparent 55%);
+    pointer-events:none;
+    z-index:0;
+  }
+  .wrap{position:relative; z-index:1; max-width:1180px; margin:0 auto;}
+
+  header h1{font-size:26px; margin:0 0 2px; letter-spacing:0.3px;}
+  header p{margin:0 0 24px; opacity:0.7; font-size:14px;}
+
+  .controls{
+    display:grid; grid-template-columns: 1fr 1.4fr; gap:16px; margin-bottom:20px;
+  }
+  @media(max-width:700px){ .controls{grid-template-columns:1fr;} }
+
+  label{display:block; font-size:12px; text-transform:uppercase; letter-spacing:1px; opacity:0.65; margin-bottom:6px;}
+
+  select, input[type="text"]{
+    width:100%;
+    background: rgba(255,255,255,0.07);
+    border:1px solid rgba(255,255,255,0.18);
+    border-radius:14px;
+    padding:12px 14px;
+    color:#f2f4f8;
+    font-size:15px;
+    backdrop-filter: blur(10px);
+    outline:none;
+  }
+  select option{ color:#111; }
+  input[type="text"]::placeholder{ color:rgba(242,244,248,0.5); }
+
+  .warn{
+    background: rgba(244,208,63,0.12);
+    border:1px solid rgba(244,208,63,0.4);
+    color:#f4d03f;
+    padding:10px 16px;
+    border-radius:12px;
+    font-size:13px;
+    margin-bottom:18px;
+    display:none;
+  }
+
+  .glass-card{
+    background: rgba(255,255,255,0.07);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border:1px solid rgba(255,255,255,0.14);
+    border-radius:22px;
+    padding:22px 26px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+  }
+
+  .hero{
+    display:grid;
+    grid-template-columns: auto 1fr auto;
+    align-items:center;
+    gap:22px;
+    padding:34px 38px;
+    margin-bottom:20px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4), 0 0 60px var(--glow);
+  }
+  @media(max-width:700px){
+    .hero{grid-template-columns:1fr; text-align:center;}
+    .hero .hero-right{text-align:center !important; margin-top:6px;}
+  }
+  .weather-icon{
+    font-size:88px;
+    animation: floaty 3.5s ease-in-out infinite;
+    filter: drop-shadow(0 0 25px var(--glow));
+    line-height:1;
+  }
+  @keyframes floaty{
+    0%{transform:translateY(0px);}
+    50%{transform:translateY(-10px);}
+    100%{transform:translateY(0px);}
+  }
+  .hero-temp{
+    font-size:64px; font-weight:700; line-height:1; margin:0;
+    color: var(--accent);
+    text-shadow: 0 0 30px var(--glow);
+  }
+  .hero-city{font-size:24px; font-weight:600; margin:6px 0 0;}
+  .hero-sub{font-size:14px; opacity:0.75; margin-top:4px;}
+  .hero-right{text-align:right; font-size:13px; opacity:0.8; line-height:1.6;}
+
+  .grid4{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:20px;
+  }
+  @media(max-width:900px){ .grid4{grid-template-columns:repeat(2,1fr);} }
+  @media(max-width:480px){ .grid4{grid-template-columns:1fr;} }
+
+  .metric-label{font-size:12px; text-transform:uppercase; letter-spacing:1px; opacity:0.65; margin-bottom:6px;}
+  .metric-value{font-size:28px; font-weight:700; margin:0;}
+  .metric-sub{font-size:13px; opacity:0.7; margin-top:4px;}
+  .aqi-pill{
+    display:inline-block; padding:3px 12px; border-radius:20px;
+    font-size:12px; font-weight:700; margin-top:8px;
+  }
+
+  .lower{
+    display:grid; grid-template-columns:1.4fr 1fr; gap:16px;
+  }
+  @media(max-width:800px){ .lower{grid-template-columns:1fr;} }
+
+  #map{
+    height:280px; border-radius:16px; margin-top:12px;
+    filter: saturate(0.9) brightness(0.9);
+  }
+  .card-title{font-size:14px; font-weight:600; margin-bottom:4px; opacity:0.9;}
+
+  .clothing-box{
+    background: rgba(255,255,255,0.08);
+    border:1px solid rgba(255,255,255,0.14);
+    border-radius:16px;
+    padding:16px 20px;
+    font-size:15px;
+    font-weight:500;
+    margin-top:10px;
+    line-height:1.5;
+  }
+
+  .outlook{display:flex; justify-content:space-between; margin-top:16px;}
+  .outlook .day{text-align:center; flex:1;}
+  .outlook .day .d{font-size:12px; opacity:0.75;}
+  .outlook .day .i{font-size:24px; margin:4px 0;}
+  .outlook .day .t{font-size:13px;}
+
+  footer{
+    text-align:center; opacity:0.5; font-size:12px; margin-top:30px;
+  }
+
+  .leaflet-container{ background:#1a1a1a; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>🇮🇳 7-Star India Weather Dashboard</h1>
+    <p>Premium real-time weather intelligence for every corner of India</p>
+  </header>
+
+  <div class="controls">
+    <div>
+      <label for="citySelect">Quick-select a major city</label>
+      <select id="citySelect"></select>
+    </div>
+    <div>
+      <label for="citySearch">Or search any Indian city / town</label>
+      <input type="text" id="citySearch" placeholder="e.g. Kochi, Shimla, Patna, Coimbatore...">
+    </div>
+  </div>
+
+  <div class="warn" id="warnBox"></div>
+
+  <div class="glass-card hero">
+    <div class="weather-icon" id="heroIcon">⛅</div>
+    <div>
+      <div class="hero-temp" id="heroTemp">--°C</div>
+      <div class="hero-city" id="heroCity">--</div>
+      <div class="hero-sub" id="heroSub">--</div>
+    </div>
+    <div class="hero-right" id="heroRight">--</div>
+  </div>
+
+  <div class="grid4">
+    <div class="glass-card">
+      <div class="metric-label">Feels Like / UV Index</div>
+      <div class="metric-value" id="feelsLike">--°C</div>
+      <div class="metric-sub" id="uvSub">UV Index: --</div>
+    </div>
+    <div class="glass-card">
+      <div class="metric-label">Humidity</div>
+      <div class="metric-value" id="humidity">--%</div>
+      <div class="metric-sub" id="humiditySub">--</div>
+    </div>
+    <div class="glass-card">
+      <div class="metric-label">Wind</div>
+      <div class="metric-value" id="wind">-- km/h</div>
+      <div class="metric-sub" id="windSub">--</div>
+    </div>
+    <div class="glass-card">
+      <div class="metric-label">Air Quality Index</div>
+      <div class="metric-value" id="aqi">--</div>
+      <span class="aqi-pill" id="aqiPill">--</span>
+    </div>
+  </div>
+
+  <div class="lower">
+    <div class="glass-card">
+      <div class="card-title">📍 Location Map</div>
+      <div id="map"></div>
+    </div>
+    <div class="glass-card">
+      <div class="card-title">👕 Smart Clothing Recommendation</div>
+      <div class="clothing-box" id="clothingBox">--</div>
+      <div class="card-title" style="margin-top:18px;">📅 5-Day Outlook (Demo)</div>
+      <div class="outlook" id="outlook"></div>
+    </div>
+  </div>
+
+  <footer>Built with ❤️ · Runs entirely offline on curated demo data (no API key needed)</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* ───────────────────────────────
+   INDIA CITY DATABASE (lat, lon, state)
+─────────────────────────────── */
+const INDIA_CITIES = {
+  "Mumbai": [19.0760, 72.8777, "Maharashtra"],
+  "Delhi": [28.6139, 77.2090, "Delhi"],
+  "Bengaluru": [12.9716, 77.5946, "Karnataka"],
+  "Chennai": [13.0827, 80.2707, "Tamil Nadu"],
+  "Kolkata": [22.5726, 88.3639, "West Bengal"],
+  "Hyderabad": [17.3850, 78.4867, "Telangana"],
+  "Pune": [18.5204, 73.8567, "Maharashtra"],
+  "Ahmedabad": [23.0225, 72.5714, "Gujarat"],
+  "Jaipur": [26.9124, 75.7873, "Rajasthan"],
+  "Srinagar": [34.0837, 74.7973, "Jammu & Kashmir"],
+  "Guwahati": [26.1445, 91.7362, "Assam"],
+  "Lucknow": [26.8467, 80.9462, "Uttar Pradesh"],
+  "Bhopal": [23.2599, 77.4126, "Madhya Pradesh"],
+  "Patna": [25.5941, 85.1376, "Bihar"],
+  "Chandigarh": [30.7333, 76.7794, "Chandigarh"],
+  "Kochi": [9.9312, 76.2673, "Kerala"],
+  "Shimla": [31.1048, 77.1734, "Himachal Pradesh"],
+  "Panaji": [15.4909, 73.8278, "Goa"],
+  "Indore": [22.7196, 75.8577, "Madhya Pradesh"],
+  "Nagpur": [21.1458, 79.0882, "Maharashtra"],
+  "Surat": [21.1702, 72.8311, "Gujarat"],
+  "Varanasi": [25.3176, 82.9739, "Uttar Pradesh"],
+  "Amritsar": [31.6340, 74.8723, "Punjab"],
+  "Dehradun": [30.3165, 78.0322, "Uttarakhand"],
+  "Raipur": [21.2514, 81.6296, "Chhattisgarh"],
+  "Ranchi": [23.3441, 85.3096, "Jharkhand"],
+  "Bhubaneswar": [20.2961, 85.8245, "Odisha"],
+  "Thiruvananthapuram": [8.5241, 76.9366, "Kerala"],
+  "Coimbatore": [11.0168, 76.9558, "Tamil Nadu"],
+  "Visakhapatnam": [17.6868, 83.2185, "Andhra Pradesh"],
+  "Jodhpur": [26.2389, 73.0243, "Rajasthan"],
+  "Udaipur": [24.5854, 73.7125, "Rajasthan"],
+  "Mysuru": [12.2958, 76.6394, "Karnataka"],
+  "Nashik": [19.9975, 73.7898, "Maharashtra"],
+  "Vadodara": [22.3072, 73.1812, "Gujarat"],
+  "Agra": [27.1767, 78.0081, "Uttar Pradesh"],
+  "Kanpur": [26.4499, 80.3319, "Uttar Pradesh"],
+  "Ludhiana": [30.9010, 75.8573, "Punjab"],
+  "Gwalior": [26.2183, 78.1828, "Madhya Pradesh"],
+  "Jammu": [32.7266, 74.8570, "Jammu & Kashmir"],
+  "Leh": [34.1526, 77.5771, "Ladakh"],
+  "Gangtok": [27.3389, 88.6065, "Sikkim"],
+  "Shillong": [25.5788, 91.8933, "Meghalaya"],
+  "Imphal": [24.8170, 93.9368, "Manipur"],
+  "Aizawl": [23.7271, 92.7176, "Mizoram"],
+  "Kohima": [25.6751, 94.1086, "Nagaland"],
+  "Itanagar": [27.0844, 93.6053, "Arunachal Pradesh"],
+  "Agartala": [23.8315, 91.2868, "Tripura"],
+  "Puducherry": [11.9416, 79.8083, "Puducherry"]
+};
+
+const DEFAULT_CITIES = ["Mumbai","Delhi","Bengaluru","Chennai","Kolkata","Hyderabad","Pune","Srinagar","Guwahati","Jaipur"];
+
+/* condition, baseTemp, baseHumidity, baseAQI */
+const MOCK_PROFILES = {
+  "Mumbai": ["Rain",29,85,78], "Delhi": ["Clouds",34,62,168], "Bengaluru": ["Rain",24,80,52],
+  "Chennai": ["Clouds",33,75,88], "Kolkata": ["Rain",31,84,112], "Hyderabad": ["Clouds",28,70,76],
+  "Pune": ["Rain",25,82,58], "Ahmedabad": ["Clouds",33,68,120], "Jaipur": ["Clouds",34,58,140],
+  "Srinagar": ["Clear",24,45,32], "Guwahati": ["Rain",30,88,68], "Lucknow": ["Clouds",33,66,152],
+  "Bhopal": ["Rain",27,78,84], "Patna": ["Rain",32,80,118], "Chandigarh": ["Clouds",32,64,96],
+  "Kochi": ["Rain",27,90,40], "Shimla": ["Rain",19,78,28], "Panaji": ["Rain",27,88,44],
+  "Indore": ["Clouds",27,70,74], "Nagpur": ["Clouds",29,68,98], "Surat": ["Rain",29,82,86],
+  "Varanasi": ["Clouds",32,74,128], "Amritsar": ["Clouds",33,60,110], "Dehradun": ["Rain",26,80,46],
+  "Raipur": ["Rain",28,79,92], "Ranchi": ["Rain",25,82,60], "Bhubaneswar": ["Rain",30,85,70],
+  "Thiruvananthapuram": ["Rain",27,89,36], "Coimbatore": ["Clouds",26,72,48], "Visakhapatnam": ["Clouds",30,78,64],
+  "Jodhpur": ["Clear",35,48,130], "Udaipur": ["Clouds",30,62,82], "Mysuru": ["Rain",23,78,42],
+  "Nashik": ["Rain",25,80,54], "Vadodara": ["Clouds",31,72,100], "Agra": ["Clouds",34,60,158],
+  "Kanpur": ["Clouds",33,64,170], "Ludhiana": ["Clouds",32,62,118], "Gwalior": ["Clear",33,55,142],
+  "Jammu": ["Clouds",33,62,104], "Leh": ["Clear",18,30,18], "Gangtok": ["Rain",18,90,24],
+  "Shillong": ["Rain",19,88,20], "Imphal": ["Rain",24,84,34], "Aizawl": ["Rain",22,86,26],
+  "Kohima": ["Rain",20,85,22], "Itanagar": ["Rain",24,87,30], "Agartala": ["Rain",28,86,38],
+  "Puducherry": ["Clouds",31,78,56]
+};
+
+const CONDITION_DESC = { Clear:"Clear Sky", Clouds:"Partly Cloudy", Rain:"Monsoon Showers", Thunderstorm:"Thunderstorms", Mist:"Hazy / Misty", Snow:"Snowfall" };
+const CONDITION_ICON = { Clear:"☀️", Clouds:"⛅", Rain:"🌧️", Thunderstorm:"⛈️", Mist:"🌫️", Snow:"❄️" };
+
+const THEMES = {
+  Clear:        { gradient:"linear-gradient(135deg,#3a1c00 0%,#7a3b00 35%,#c9760a 70%,#ffb347 100%)", glow:"rgba(255,179,71,0.35)", accent:"#ffb347" },
+  Clouds:       { gradient:"linear-gradient(135deg,#101820 0%,#253544 40%,#3d5165 75%,#6b8296 100%)", glow:"rgba(120,160,190,0.30)", accent:"#8fb8d6" },
+  Rain:         { gradient:"linear-gradient(135deg,#050914 0%,#0d1b2e 35%,#16324a 70%,#2c5470 100%)", glow:"rgba(70,130,180,0.35)", accent:"#5fb0e0" },
+  Thunderstorm: { gradient:"linear-gradient(135deg,#020204 0%,#14101f 40%,#2b1f3d 75%,#4a3160 100%)", glow:"rgba(150,100,220,0.35)", accent:"#b58cf2" },
+  Mist:         { gradient:"linear-gradient(135deg,#1c1c1e 0%,#3a3a3d 45%,#5c5c60 80%,#8a8a8f 100%)", glow:"rgba(200,200,205,0.28)", accent:"#cfcfd4" },
+  Snow:         { gradient:"linear-gradient(135deg,#0b1220 0%,#1b2a3d 30%,#3d5a75 65%,#cfe8ff 100%)", glow:"rgba(207,232,255,0.40)", accent:"#dff2ff" }
+};
+
+const AQI_LEVELS = [ [50,"Good","#2ecc71"], [100,"Satisfactory","#a8e05f"], [200,"Moderate","#f4d03f"], [300,"Poor","#f39c12"], [400,"Very Poor","#e74c3c"], [99999,"Severe","#8e44ad"] ];
+
+/* ───────────────────────────────
+   HELPERS
+─────────────────────────────── */
+function seedFor(city){
+  let s = 0;
+  for (const ch of city) s += ch.charCodeAt(0);
+  return mulberry32(s);
+}
+function mulberry32(a){
+  return function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function randRange(rng, min, max){ return min + rng() * (max - min); }
+function randInt(rng, min, max){ return Math.floor(randRange(rng, min, max + 1)); }
+function choice(rng, arr){ return arr[Math.floor(rng() * arr.length)]; }
+
+function getMockWeather(city){
+  const rng = seedFor(city);
+  let condition, tempBase, humBase, aqiBase;
+  if (MOCK_PROFILES[city]) {
+    [condition, tempBase, humBase, aqiBase] = MOCK_PROFILES[city];
+  } else {
+    condition = choice(rng, ["Clear","Clouds","Rain"]);
+    tempBase = randInt(rng, 24, 35);
+    humBase = randInt(rng, 55, 88);
+    aqiBase = randInt(rng, 40, 150);
+  }
+  const temp = tempBase + randRange(rng, -1.5, 1.5);
+  const feelsLike = temp + (humBase > 75 ? 4 : 1.5) + randRange(rng, -0.5, 0.5);
+  const humidity = Math.max(20, Math.min(100, humBase + randInt(rng, -4, 4)));
+  const windSpeed = Math.round(randRange(rng, 6, 28) * 10) / 10;
+  const windDeg = randInt(rng, 0, 359);
+  const uv = condition === "Clear" ? randInt(rng, 1, 11) : randInt(rng, 1, 6);
+  const aqi = Math.max(10, aqiBase + randInt(rng, -10, 10));
+  return {
+    temp: Math.round(temp*10)/10, feelsLike: Math.round(feelsLike*10)/10,
+    humidity, windSpeed, windDeg, uv, aqi, condition,
+    description: CONDITION_DESC[condition] || condition
+  };
+}
+
+function resolveCity(query){
+  if(!query) return null;
+  const q = query.trim().toLowerCase();
+  for(const name in INDIA_CITIES){ if(name.toLowerCase() === q) return name; }
+  for(const name in INDIA_CITIES){ if(name.toLowerCase().includes(q)) return name; }
+  return null;
+}
+
+function aqiLevel(aqi){
+  for(const [threshold,label,color] of AQI_LEVELS){ if(aqi <= threshold) return [label,color]; }
+  return ["Severe","#8e44ad"];
+}
+
+function windCompass(deg){
+  const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+  return dirs[Math.round(deg/22.5) % 16];
+}
+
+function clothingAdvice(w){
+  const {temp, humidity, condition} = w;
+  if(condition === "Rain" || condition === "Thunderstorm")
+    return "🌧️ Monsoon Alert: Carry an umbrella, wear waterproof footwear and quick-dry fabrics.";
+  if(temp >= 33 && humidity >= 70)
+    return "🥵 High Heat & Humidity: Wear light cotton clothes, stay hydrated, and avoid midday sun.";
+  if(temp >= 33)
+    return "☀️ Hot & Dry: Light cotton or linen clothing recommended, plus sunglasses and sunscreen.";
+  if(condition === "Snow" || temp <= 10)
+    return "🧥 Cold Conditions: Layer up with woollens, a good jacket, and thermal wear.";
+  if(temp <= 18)
+    return "🧣 Cool Weather: A light jacket or sweater is ideal, especially in the evening.";
+  return "😊 Pleasant Weather: Comfortable regular clothing works well today.";
+}
+
+/* ───────────────────────────────
+   MAP
+─────────────────────────────── */
+let leafletMap = null;
+let leafletMarker = null;
+function initMap(lat, lon){
+  if(!leafletMap){
+    leafletMap = L.map('map', { zoomControl:true, attributionControl:false }).setView([lat, lon], 9);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 15 }).addTo(leafletMap);
+    leafletMarker = L.circleMarker([lat, lon], { radius:9, color:"#ffb347", fillColor:"#ffb347", fillOpacity:0.9, weight:2 }).addTo(leafletMap);
+  } else {
+    leafletMap.setView([lat, lon], 9);
+    leafletMarker.setLatLng([lat, lon]);
+  }
+}
+
+/* ───────────────────────────────
+   RENDER
+─────────────────────────────── */
+function render(city){
+  let lat, lon, state, warn = "";
+  if(INDIA_CITIES[city]){
+    [lat, lon, state] = INDIA_CITIES[city];
+  } else {
+    lat = 22.9734; lon = 78.6569; state = "India";
+    warn = `⚠️ "${city}" isn't in our verified city database — showing an estimated regional forecast. Try a nearby major city for higher accuracy.`;
+  }
+
+  const w = getMockWeather(city);
+  const theme = THEMES[w.condition] || THEMES.Clouds;
+
+  document.body.style.background = theme.gradient;
+  document.documentElement.style.setProperty('--glow', theme.glow);
+  document.documentElement.style.setProperty('--accent', theme.accent);
+
+  const warnBox = document.getElementById('warnBox');
+  if(warn){ warnBox.style.display = 'block'; warnBox.textContent = warn; }
+  else { warnBox.style.display = 'none'; }
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-IN', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
+  const timeStr = now.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+
+  document.getElementById('heroIcon').textContent = CONDITION_ICON[w.condition] || "🌤️";
+  document.getElementById('heroTemp').textContent = w.temp + "°C";
+  document.getElementById('heroCity').textContent = city + ", " + state;
+  document.getElementById('heroSub').textContent = w.description + " · " + dateStr + " · " + timeStr;
+  document.getElementById('heroRight').innerHTML = "🟢 Demo Data<br>Lat " + lat.toFixed(2) + ", Lon " + lon.toFixed(2);
+
+  document.getElementById('feelsLike').textContent = w.feelsLike + "°C";
+  document.getElementById('uvSub').textContent = "UV Index: " + w.uv;
+
+  document.getElementById('humidity').textContent = w.humidity + "%";
+  document.getElementById('humiditySub').textContent = w.humidity >= 75 ? "High — coastal-level moisture" : (w.humidity >= 40 ? "Comfortable" : "Low / Dry");
+
+  document.getElementById('wind').textContent = w.windSpeed + " km/h";
+  document.getElementById('windSub').textContent = "Direction: " + windCompass(w.windDeg) + " (" + w.windDeg + "°)";
+
+  document.getElementById('aqi').textContent = w.aqi;
+  const [aqiLabel, aqiColor] = aqiLevel(w.aqi);
+  const pill = document.getElementById('aqiPill');
+  pill.textContent = aqiLabel;
+  pill.style.background = aqiColor + "33";
+  pill.style.color = aqiColor;
+  pill.style.border = "1px solid " + aqiColor;
+
+  document.getElementById('clothingBox').textContent = clothingAdvice(w);
+
+  // 5-day outlook
+  const outlookEl = document.getElementById('outlook');
+  outlookEl.innerHTML = "";
+  const rng = seedFor(city + "outlook");
+  const iconVals = Object.values(CONDITION_ICON);
+  for(let i=1;i<=5;i++){
+    const d = new Date(now); d.setDate(now.getDate()+i);
+    const dayLabel = d.toLocaleDateString('en-IN', { weekday:'short' });
+    const icon = choice(rng, iconVals);
+    const t = Math.round((w.temp + randRange(rng, -4, 3)) * 10) / 10;
+    const div = document.createElement('div');
+    div.className = 'day';
+    div.innerHTML = `<div class="d">${dayLabel}</div><div class="i">${icon}</div><div class="t">${t}°</div>`;
+    outlookEl.appendChild(div);
+  }
+
+  initMap(lat, lon);
+}
+
+/* ───────────────────────────────
+   INIT
+─────────────────────────────── */
+const citySelect = document.getElementById('citySelect');
+DEFAULT_CITIES.forEach(c => {
+  const opt = document.createElement('option');
+  opt.value = c; opt.textContent = c;
+  citySelect.appendChild(opt);
+});
+
+const citySearch = document.getElementById('citySearch');
+
+citySelect.addEventListener('change', () => {
+  citySearch.value = "";
+  render(citySelect.value);
+});
+
+let searchTimeout = null;
+citySearch.addEventListener('input', () => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    const q = citySearch.value.trim();
+    if(!q){ render(citySelect.value); return; }
+    const match = resolveCity(q);
+    render(match || q.replace(/\b\w/g, c => c.toUpperCase()));
+  }, 350);
+});
+
+render(citySelect.value);
+</script>
+</body>
+</html>
